@@ -71,6 +71,7 @@ namespace DataSetsSparsity
             int dimIndex = -1;
             int Maingridindex = -1;
 
+            //ASAFAB - compute Patitions
             bool IsPartitionOK = false;
             if (rc.split_type == 0)
                 IsPartitionOK = getBestPartitionResult(ref dimIndex, ref Maingridindex, GeoWaveArr, GeoWaveID, Error, Dime2Take);
@@ -150,6 +151,7 @@ namespace DataSetsSparsity
             recursiveBSP_WaveletsByConsts(GeoWaveArr, GeoWaveArr[GeoWaveID].child1, seed);
         }
 
+        //ASAFAB - best partiaion
         private bool getBestPartitionResult(ref int dimIndex, ref int Maingridindex, List<GeoWave> GeoWaveArr, int GeoWaveID, double Error, bool[] Dims2Take)
         {
             double[][] error_dim_partition = new double[2][];//error, Maingridindex
@@ -204,6 +206,7 @@ namespace DataSetsSparsity
             return true;
         }
 
+        // ASAFAB - choose parition
         private double[] getBestPartitionLargeDB(int dimIndex, GeoWave geoWave)
         {
             double[] error_n_point = new double[2];//error index
