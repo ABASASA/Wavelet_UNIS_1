@@ -338,49 +338,7 @@ namespace DataSetsSparsity
         }
 
 
-        // ASAFAB - first try to find optimal partiiton
-        private bool GetUnisotropicParition(ref double hyperPlaneVector,
-                            List<GeoWave> GeoWaveArr, int GeoWaveID, double Error)
-        {
-            List<int> dataIDInGwW = new List<int>(GeoWaveArr[GeoWaveID].pointsIdArray); // The index of the relevent data
-            double[] meanPosition = new double[rc.dim];
-            double[][] centeredTrainingData = new double[dataIDInGwW.Count()][];
-            
-            // Calculate mmean position of the relevant data (node data).
-            for (int indexTmp = 0; indexTmp < dataIDInGwW.Count(); indexTmp++)
-            {
-                for (int j = 0; j < this.rc.dim; j++)
-                {
-                    meanPosition[j] += training_dt[dataIDInGwW[indexTmp]][j];
-                }
-            }
-            for (int j = 0; j < this.rc.dim; j++)
-            {
-                meanPosition[j] = meanPosition[j] / dataIDInGwW.Count();
-            }
-
-
-            // move the node to mean 
-            for (int indexTmp = 0; indexTmp < dataIDInGwW.Count(); indexTmp++)
-            {
-                centeredTrainingData[dataIDInGwW[indexTmp]] = new double[rc.dim];
-                for (int j = 0; j < training_dt[0].Count(); j++)
-                {
-                    centeredTrainingData[dataIDInGwW[indexTmp]][j] = training_dt[dataIDInGwW[indexTmp]][j] - meanPosition[j];
-                }
-            }
-
-            
-            double[] strtingState = new double[this.rc.dim + 1];
-            alglib.minlbfgsstate state;
-            alglib.minlbfgscreate(1, strtingState, out state);
-            return false;
-            
-
-        }
-
-
-
+        
 
         private double[] getGiniPartitionLargeDB(int dimIndex, GeoWave geoWave)
         {
@@ -541,6 +499,77 @@ namespace DataSetsSparsity
                     Dim2Take[index] = true;
             }
             return Dim2Take;
+        }
+
+        // ASAFAB - first try to find optimal partiiton
+        private bool GetUnisotropicParition(ref double hyperPlaneVector,
+                            List<GeoWave> GeoWaveArr, int GeoWaveID, double Error)
+        {
+            List<int> dataIDInGwW = new List<int>(GeoWaveArr[GeoWaveID].pointsIdArray); // The index of the relevent data
+            double[] meanPosition = new double[rc.dim];
+            double[][] centeredTrainingData = new double[dataIDInGwW.Count()][];
+
+            // Calculate mmean position of the relevant data (node data).
+            for (int indexTmp = 0; indexTmp < dataIDInGwW.Count(); indexTmp++)
+            {
+                for (int j = 0; j < this.rc.dim; j++)
+                {
+                    meanPosition[j] += training_dt[dataIDInGwW[indexTmp]][j];
+                }
+            }
+            for (int j = 0; j < this.rc.dim; j++)
+            {
+                meanPosition[j] = meanPosition[j] / dataIDInGwW.Count();
+            }
+
+
+            // move the fetuare of the data to mean 
+            for (int indexTmp = 0; indexTmp < dataIDInGwW.Count(); indexTmp++)
+            {
+                centeredTrainingData[dataIDInGwW[indexTmp]] = new double[rc.dim + 1];
+                centeredTrainingData[dataIDInGwW[indexTmp]][rc.dim] = 1; // Placing 1 in the last index  -> transfet the point to higher dimnsion
+                for (int j = 0; j < training_dt[0].Count(); j++)
+                {
+                    centeredTrainingData[dataIDInGwW[indexTmp]][j] = training_dt[dataIDInGwW[indexTmp]][j] - meanPosition[j];
+                }
+            }
+
+            // Initialize the optimizer
+            double epsg = 0.0000000001;
+            double epsf = 0;
+            double epsx = 0;
+            double diffstep = 1.0e-6;
+            int maxits = 0;
+            alglib.minlbfgsreport rep;
+
+            double[] strtingState = new double[this.rc.dim + 1];
+            alglib.minlbfgsstate state;
+            alglib.minlbfgscreate(1, strtingState, out state);
+
+            alglib.minlbfgssetcond(state, epsg, epsf, epsx, maxits);
+            alglib.minlbfgsoptimize(state, function1_func, null, null);
+            //alglib.minlbfgsresults(state, out x, out rep);
+            return false;
+
+
+        }
+
+        //ASAFAB - this is the function we want to minimize
+        public static void function1_func(double[] x, ref double func, object obj)
+        {
+            // clculate the mean of each side
+            double mean0 = 0;
+            double mean1 = 0;
+
+            double error0 = 0;
+            double error1 = 0;
+
+            List<int> indexesOFChild0 = new List<int>();
+            List<int> indexesOFChild1 = new List<int>();
+            decicionTree tree = (decicionTree) obj;
+            //for (int tmpIndex = 0; t)
+             func = 2;
+
         }
     }
 }
