@@ -83,6 +83,9 @@
     <Reference Include="Accord.Statistics">
       <HintPath>..\runfile\Accord.Statistics.dll</HintPath>
     </Reference>
+    <Reference Include="alglibnet2">
+      <HintPath>..\runfile\alglibnet2.dll</HintPath>
+    </Reference>
     <Reference Include="AWSSDK">
       <HintPath>..\runfile\AWSSDK.dll</HintPath>
     </Reference>

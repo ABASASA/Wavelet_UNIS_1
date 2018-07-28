@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Accord.Math;
 using System.IO;
 
+
 namespace DataSetsSparsity
 {
     class decicionTree
@@ -70,6 +71,7 @@ namespace DataSetsSparsity
 
             int dimIndex = -1;
             int Maingridindex = -1;
+            double hyperPlaneVector = -1;
 
             //ASAFAB - compute Patitions
             bool IsPartitionOK = false;
@@ -98,6 +100,18 @@ namespace DataSetsSparsity
                 int two = ran2.Next(0, int.MaxValue / 10);
                 bool[] Dim2TakeNode = getDim2Take(rc, one + two);
                 IsPartitionOK = GetGiniPartitionResult(ref dimIndex, ref Maingridindex, GeoWaveArr, GeoWaveID, Error, Dim2TakeNode);
+            }
+            else if (rc.split_type == 5)  // Unisotropic partiion
+            {
+                // Add 1 to every Sample
+                IsPartitionOK = GetUnisotropicParition(ref hyperPlaneVector, GeoWaveArr, GeoWaveID, Error);
+
+                // Find Theta minimizer
+
+            }
+            else
+            {
+                throw new Exception("This split type isn't known");
             }
 
             if (!IsPartitionOK)
@@ -322,6 +336,51 @@ namespace DataSetsSparsity
             Maingridindex = Convert.ToInt32(error_dim_partition[1][dimIndex]);
             return true;
         }
+
+
+        // ASAFAB - first try to find optimal partiiton
+        private bool GetUnisotropicParition(ref double hyperPlaneVector,
+                            List<GeoWave> GeoWaveArr, int GeoWaveID, double Error)
+        {
+            List<int> dataIDInGwW = new List<int>(GeoWaveArr[GeoWaveID].pointsIdArray); // The index of the relevent data
+            double[] meanPosition = new double[rc.dim];
+            double[][] centeredTrainingData = new double[dataIDInGwW.Count()][];
+            
+            // Calculate mmean position of the relevant data (node data).
+            for (int indexTmp = 0; indexTmp < dataIDInGwW.Count(); indexTmp++)
+            {
+                for (int j = 0; j < this.rc.dim; j++)
+                {
+                    meanPosition[j] += training_dt[dataIDInGwW[indexTmp]][j];
+                }
+            }
+            for (int j = 0; j < this.rc.dim; j++)
+            {
+                meanPosition[j] = meanPosition[j] / dataIDInGwW.Count();
+            }
+
+
+            // move the node to mean 
+            for (int indexTmp = 0; indexTmp < dataIDInGwW.Count(); indexTmp++)
+            {
+                centeredTrainingData[dataIDInGwW[indexTmp]] = new double[rc.dim];
+                for (int j = 0; j < training_dt[0].Count(); j++)
+                {
+                    centeredTrainingData[dataIDInGwW[indexTmp]][j] = training_dt[dataIDInGwW[indexTmp]][j] - meanPosition[j];
+                }
+            }
+
+            
+            double[] strtingState = new double[this.rc.dim + 1];
+            alglib.minlbfgsstate state;
+            alglib.minlbfgscreate(1, strtingState, out state);
+            return false;
+            
+
+        }
+
+
+
 
         private double[] getGiniPartitionLargeDB(int dimIndex, GeoWave geoWave)
         {

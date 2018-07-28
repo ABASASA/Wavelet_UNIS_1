@@ -80,6 +80,7 @@ namespace DataSetsSparsity
             double[] tmpMeanValue = calc_MeanValue(labelsDt, indexArr);
             double Error = 0;
 
+            // ASAFAB - notice
             switch (rc.partitionErrType)
             {
                 case 2: //L2
