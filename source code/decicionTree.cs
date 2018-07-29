@@ -522,33 +522,55 @@ namespace DataSetsSparsity
                 meanPosition[j] = meanPosition[j] / dataIDInGwW.Count();
             }
 
-
+            // combine positions and labels
+            double[][][] dataForOptimizer = new double[2][][];
+            dataForOptimizer[0] = new double[dataIDInGwW.Count()][];
+            dataForOptimizer[1] = new double[dataIDInGwW.Count()][];
             // move the fetuare of the data to mean 
             for (int indexTmp = 0; indexTmp < dataIDInGwW.Count(); indexTmp++)
             {
-                centeredTrainingData[dataIDInGwW[indexTmp]] = new double[rc.dim + 1];
-                centeredTrainingData[dataIDInGwW[indexTmp]][rc.dim] = 1; // Placing 1 in the last index  -> transfet the point to higher dimnsion
+                dataForOptimizer[0][indexTmp] = new double[rc.dim + 1];
+                centeredTrainingData[indexTmp] = new double[rc.dim + 1];
+                centeredTrainingData[indexTmp][rc.dim] = 1; // Placing 1 in the last index  -> transfet the point to higher dimnsion
                 for (int j = 0; j < training_dt[0].Count(); j++)
                 {
-                    centeredTrainingData[dataIDInGwW[indexTmp]][j] = training_dt[dataIDInGwW[indexTmp]][j] - meanPosition[j];
+                    centeredTrainingData[indexTmp][j] = training_dt[dataIDInGwW[indexTmp]][j] - meanPosition[j];
+                    dataForOptimizer[0][indexTmp][j] = centeredTrainingData[indexTmp][j];
+                }
+                dataForOptimizer[0][indexTmp][rc.dim] = 1;
+
+                dataForOptimizer[1][indexTmp] = new double[training_label[0].Count()];
+                for (int indexLabelTmp = 0; indexLabelTmp < training_label[0].Count(); indexLabelTmp ++)
+                {
+                    dataForOptimizer[1][indexTmp][indexLabelTmp] = training_label[dataIDInGwW[indexTmp]][indexLabelTmp];
                 }
             }
+            
+             
 
             // Initialize the optimizer
             double epsg = 0.0000000001;
-            double epsf = 0;
-            double epsx = 0;
-            double diffstep = 1.0e-6;
-            int maxits = 0;
+            double epsf = 0.00000000001;
+            double epsx = 0.00000000001;
+            double diffstep = 0.5;
+            int maxits = 100000;
             alglib.minlbfgsreport rep;
 
             double[] strtingState = new double[this.rc.dim + 1];
+            double[] endState = new double[this.rc.dim + 1];
+
             alglib.minlbfgsstate state;
+
+            alglib.minlbfgscreatef(12, strtingState, diffstep, out state);
+            alglib.minlbfgssetcond(state, epsg, epsf, epsx, maxits);
+            alglib.minlbfgsoptimize(state, function1_func, null, (object) dataForOptimizer);
+            alglib.minlbfgsresults(state, out endState, out rep);
+            /*
             alglib.minlbfgscreate(1, strtingState, out state);
 
             alglib.minlbfgssetcond(state, epsg, epsf, epsx, maxits);
             alglib.minlbfgsoptimize(state, function1_func, null, null);
-            //alglib.minlbfgsresults(state, out x, out rep);
+            //alglib.minlbfgsresults(state, out x, out rep); */
             return false;
 
 
@@ -557,19 +579,84 @@ namespace DataSetsSparsity
         //ASAFAB - this is the function we want to minimize
         public static void function1_func(double[] x, ref double func, object obj)
         {
+            // Cast bsck to tree
+            double[][][] dataForOptimizer = (double[][][]) obj;
+
             // clculate the mean of each side
-            double mean0 = 0;
-            double mean1 = 0;
+            double[] mean0 = new double[dataForOptimizer[1][0].Count()];
+            double[] mean1 = new double[dataForOptimizer[1][0].Count()];
 
             double error0 = 0;
             double error1 = 0;
 
-            List<int> indexesOFChild0 = new List<int>();
-            List<int> indexesOFChild1 = new List<int>();
-            decicionTree tree = (decicionTree) obj;
-            //for (int tmpIndex = 0; t)
-             func = 2;
+            List<double[]> valuesChild0 = new List<double[]>();
+            List<double[]> valuesChild1 = new List<double[]>();
 
+            for (int passingIndex = 0; passingIndex < dataForOptimizer[0].Count(); passingIndex++)
+            {
+                double score = 0;
+                // compute score (up or down the hyperplane)
+                for (int positionIndex = 0; positionIndex < dataForOptimizer[0][0].Count(); positionIndex++)
+                {
+                    score += x[positionIndex] * dataForOptimizer[0][passingIndex][positionIndex];
+                }
+
+                if (score > 0) // go to child 0 
+                {
+                    valuesChild0.Add(dataForOptimizer[1][passingIndex]);
+                    for (int valueIndex = 0; valueIndex < dataForOptimizer[1][0].Count(); valueIndex ++)
+                    {
+                        mean0[valueIndex] += dataForOptimizer[1][passingIndex][valueIndex];
+                    }
+
+                }
+                else // go to child1
+                {
+                    valuesChild1.Add(dataForOptimizer[1][passingIndex]);
+                    for (int valueIndex = 0; valueIndex < dataForOptimizer[1][0].Count(); valueIndex++)
+                    {
+                        mean1[valueIndex] += dataForOptimizer[1][passingIndex][valueIndex];
+                    }
+                }
+
+                // devide the mean (so ... it will be actully be mean)
+                for (int valueIndex = 0; valueIndex < dataForOptimizer[1][0].Count(); valueIndex++)
+                {
+                    mean0[valueIndex] /= dataForOptimizer[1].Count();
+                    mean1[valueIndex] /= dataForOptimizer[1].Count();
+                }
+            }
+            error0 = CalculateErrorOFChild(mean0, valuesChild0);
+            error1 = CalculateErrorOFChild(mean1, valuesChild1);
+            // List<int> originalIndexList = tree;
+            //for (int tmpIndex = 0; t)
+            func = error0 + error1;
+
+        }
+        public static double CalculateErrorOFChild(double[] mean, List<double[]> valueChilds)
+        {
+            if (valueChilds.Count() == 0)
+            {
+                return 0;
+            }
+            double[] error = new double[valueChilds[0].Count()];
+            //calulate the diffrance between mean and labels
+            for (int passingIndex = 0; passingIndex < valueChilds.Count(); passingIndex++)
+            {
+                for (int valueIndex = 0; valueIndex < valueChilds[0].Count(); valueIndex++)
+                {
+                    error[valueIndex] = valueChilds[passingIndex][valueIndex] - mean[valueIndex];
+                }
+            }
+
+            // calculate norm
+            double normError = 0;
+            for (int valueIndex = 0; valueIndex < valueChilds[0].Count(); valueIndex++)
+            {
+                normError += error[valueIndex] * error[valueIndex];
+            }
+            normError = Math.Sqrt(normError);
+            return normError;
         }
     }
 }
