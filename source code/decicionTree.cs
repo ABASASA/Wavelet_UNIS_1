@@ -16,6 +16,7 @@ namespace DataSetsSparsity
         private long[][] training_GridIndex_dt;
         private double[][] training_label;
         private bool[] Dime2Take;
+        private double[] m_MeanPositionForSplit_5;
 
         public decicionTree(recordConfig rc, DB db, bool[] Dime2Take)
         {
@@ -72,7 +73,7 @@ namespace DataSetsSparsity
             int dimIndex = -1;
             int Maingridindex = -1;
             double hyperPlaneVector = -1;
-
+            double[] hyperPlane = new double[rc.dim + 1] ;
             //ASAFAB - compute Patitions
             bool IsPartitionOK = false;
             if (rc.split_type == 0)
@@ -104,10 +105,10 @@ namespace DataSetsSparsity
             else if (rc.split_type == 5)  // Unisotropic partiion
             {
                 // Add 1 to every Sample
-                IsPartitionOK = GetUnisotropicParition(ref hyperPlaneVector, GeoWaveArr, GeoWaveID, Error);
-
+                IsPartitionOK = GetUnisotropicParition(ref hyperPlaneVector, GeoWaveArr, GeoWaveID, Error, out hyperPlane);
                 // Find Theta minimizer
-
+                dimIndex = 0;
+                Maingridindex = 0;
             }
             else
             {
@@ -117,8 +118,12 @@ namespace DataSetsSparsity
             if (!IsPartitionOK)
                 return;
 
-            GeoWave child0 = new GeoWave(GeoWaveArr[GeoWaveID].boubdingBox, training_label[0].Count(), GeoWaveArr[GeoWaveID].rc);
-            GeoWave child1 = new GeoWave(GeoWaveArr[GeoWaveID].boubdingBox, training_label[0].Count(), GeoWaveArr[GeoWaveID].rc);
+            GeoWave child0;
+            GeoWave child1;
+
+
+            child0 = new GeoWave(GeoWaveArr[GeoWaveID].boubdingBox, training_label[0].Count(), GeoWaveArr[GeoWaveID].rc);
+            child1 = new GeoWave(GeoWaveArr[GeoWaveID].boubdingBox, training_label[0].Count(), GeoWaveArr[GeoWaveID].rc);
 
             //set partition
             child0.boubdingBox[1][dimIndex] = Maingridindex;
@@ -143,8 +148,14 @@ namespace DataSetsSparsity
                 return;
 
             //SHOULD I VERIFY THAT THE CHILD IS NOT ITS PARENT ? (IN CASES WHERE CAN'T MODEFY THE PARTITION)
-
-            setChildrensPointsAndMeanValue(ref child0, ref child1, dimIndex, GeoWaveArr[GeoWaveID].pointsIdArray);
+            if(rc.split_type != 5)
+            {
+                setChildrensPointsAndMeanValue(ref child0, ref child1, dimIndex, GeoWaveArr[GeoWaveID].pointsIdArray);
+            } else
+            {
+                setChildrensPointsAndMeanValueUnIsotrpi(ref child0, ref child1,
+                             hyperPlane, GeoWaveArr[GeoWaveID].pointsIdArray);
+            }
             //SET TWO CHILDS
             child0.parentID = child1.parentID = GeoWaveID;
             child0.child0 = child1.child0 = -1;
@@ -503,7 +514,7 @@ namespace DataSetsSparsity
 
         // ASAFAB - first try to find optimal partiiton
         private bool GetUnisotropicParition(ref double hyperPlaneVector,
-                            List<GeoWave> GeoWaveArr, int GeoWaveID, double Error)
+                            List<GeoWave> GeoWaveArr, int GeoWaveID, double Error, out double[] hyperPlane)
         {
             List<int> dataIDInGwW = new List<int>(GeoWaveArr[GeoWaveID].pointsIdArray); // The index of the relevent data
             double[] meanPosition = new double[rc.dim];
@@ -545,23 +556,24 @@ namespace DataSetsSparsity
                     dataForOptimizer[1][indexTmp][indexLabelTmp] = training_label[dataIDInGwW[indexTmp]][indexLabelTmp];
                 }
             }
-            
-             
+
+            this.m_MeanPositionForSplit_5 = meanPosition;
 
             // Initialize the optimizer
-            double epsg = 0.0000000001;
-            double epsf = 0.00000000001;
-            double epsx = 0.00000000001;
-            double diffstep = 0.5;
+            double epsg = 0.000000000;
+            double epsf = 0.000000000;
+            double epsx = 0.0000000000;
+            double diffstep = 2;
             int maxits = 100000;
             alglib.minlbfgsreport rep;
 
             double[] strtingState = new double[this.rc.dim + 1];
             double[] endState = new double[this.rc.dim + 1];
-
+            strtingState[rc.dim] = 1;
+            strtingState[rc.dim - 1] = 2;
             alglib.minlbfgsstate state;
 
-            alglib.minlbfgscreatef(12, strtingState, diffstep, out state);
+            alglib.minlbfgscreatef(this.rc.dim, strtingState, diffstep, out state);
             alglib.minlbfgssetcond(state, epsg, epsf, epsx, maxits);
             alglib.minlbfgsoptimize(state, function1_func, null, (object) dataForOptimizer);
             alglib.minlbfgsresults(state, out endState, out rep);
@@ -571,7 +583,8 @@ namespace DataSetsSparsity
             alglib.minlbfgssetcond(state, epsg, epsf, epsx, maxits);
             alglib.minlbfgsoptimize(state, function1_func, null, null);
             //alglib.minlbfgsresults(state, out x, out rep); */
-            return false;
+            hyperPlane = endState;
+            return true;
 
 
         }
@@ -657,6 +670,47 @@ namespace DataSetsSparsity
             }
             normError = Math.Sqrt(normError);
             return normError;
+        }
+
+        //ASAFAB - do the actull partition
+        private void setChildrensPointsAndMeanValueUnIsotrpi(ref GeoWave child0, ref GeoWave child1, 
+            double[] hyperPlane, List<int> indexArr)
+        {
+            child0.MeanValue.Multiply(0);
+            child1.MeanValue.Multiply(0);
+            double[] mean0 = new double[rc.dim];
+            double[] mean1 = new double[rc.dim];
+
+            //GO OVER ALL POINTS IN REGION
+            for (int i = 0; i < indexArr.Count; i++)
+            {
+                double score = 0;
+                for (int positionSizeIndex = 0; positionSizeIndex < this.rc.dim; positionSizeIndex++)
+                {
+                    score += hyperPlane[positionSizeIndex] * 
+                        (training_dt[indexArr[i]][positionSizeIndex] - this.m_MeanPositionForSplit_5[positionSizeIndex]);
+                }
+                score += hyperPlane[this.rc.dim];
+                if (score > 0)
+                {
+                    child0.pointsIdArray.Add(indexArr[i]);
+                    for (int positionSizeIndex = 0; positionSizeIndex < this.rc.dim; positionSizeIndex++)
+                    {
+                        mean0[positionSizeIndex] += training_dt[indexArr[i]][positionSizeIndex];
+                    }
+                } else
+                {
+                    child1.pointsIdArray.Add(indexArr[i]);
+                    for (int positionSizeIndex = 0; positionSizeIndex < this.rc.dim; positionSizeIndex++)
+                    {
+                        mean1[positionSizeIndex] += training_dt[indexArr[i]][positionSizeIndex];
+                    }
+                }
+             }
+            if (child0.pointsIdArray.Count > 0)
+                child0.MeanValue = child0.MeanValue.Divide(Convert.ToDouble(child0.pointsIdArray.Count));
+            if (child1.pointsIdArray.Count > 0)
+                child1.MeanValue = child1.MeanValue.Divide(Convert.ToDouble(child1.pointsIdArray.Count));
         }
     }
 }
