@@ -111,10 +111,10 @@ namespace DataSetsSparsity
                 int one = ran1.Next(0, int.MaxValue / 10);
                 int two = ran2.Next(0, int.MaxValue / 10);
                 bool[] Dim2TakeNode = getDim2Take(rc, one + two);
-                IsPartitionOK = getBestPartitionResult(ref dimIndex, ref Maingridindex, GeoWaveArr, GeoWaveID, Error, Dim2TakeNode);
+               // IsPartitionOK = getBestPartitionResult(ref dimIndex, ref Maingridindex, GeoWaveArr, GeoWaveID, Error, Dim2TakeNode);
                 // Add 1 to every Sample
-                double splitValue = Form1.MainGrid[dimIndex][Maingridindex];
-                IsPartitionOK = GetUnisotropicParition(ref hyperPlaneVector, GeoWaveArr, GeoWaveID, Error, out hyperPlane, dimIndex, splitValue);
+                //double splitValue = Form1.MainGrid[dimIndex][Maingridindex];
+                IsPartitionOK = GetUnisotropicParition(ref hyperPlaneVector, GeoWaveArr, GeoWaveID, Error, out hyperPlane);
                 // Find Theta minimizer
                 dimIndex = 0;
                 Maingridindex = 0;
@@ -183,7 +183,7 @@ namespace DataSetsSparsity
             //RECURSION STEP !!! ASAFAB
             if (GeoWaveArr[GeoWaveArr.Count - 2].pointsIdArray.Count == 0 || GeoWaveArr[GeoWaveArr.Count - 1].pointsIdArray.Count == 0)
             {
-                int a111 = 1;
+               int a111 = 1;
             }
             recursiveBSP_WaveletsByConsts(GeoWaveArr, GeoWaveArr[GeoWaveID].child0, seed);
             recursiveBSP_WaveletsByConsts(GeoWaveArr, GeoWaveArr[GeoWaveID].child1, seed);
@@ -527,7 +527,7 @@ namespace DataSetsSparsity
 
         // ASAFAB - first try to find optimal partiiton
         private bool GetUnisotropicParition(ref double hyperPlaneVector ,List<GeoWave> GeoWaveArr, 
-            int GeoWaveID, double Error, out double[] hyperPlane, int dimIndex, double Maingridindex)
+            int GeoWaveID, double Error, out double[] hyperPlane)
         {
             List<int> dataIDInGwW = new List<int>(GeoWaveArr[GeoWaveID].pointsIdArray); // The index of the relevent data
             double[] meanPosition = new double[rc.dim];
@@ -573,21 +573,22 @@ namespace DataSetsSparsity
                 }
             }
 
+            Random rnd = new Random();
             this.m_MeanPositionForSplit_5 = meanPosition;
             // ASAFAB - Initialize the optimizer
-            double epsg = 0.000000010100000;
+            double epsg = 0.000010100000;
             double epsf = 0.00000000000;
             double epsx = 0.000000;
-            double diffstep = 1;
-            int maxits = 0;
-            int[]a  =  UseKMeans2(dataForOptimizer[0]);
+            double diffstep = 0.5;
+            int maxits = 1000;
+            //int[]a  =  UseKMeans2(dataForOptimizer[0]);
             double[] strtingState = new double[this.rc.dim + 1];
             double[] endState = new double[this.rc.dim + 1];
-            strtingState[dimIndex] = 1;
+            strtingState[rnd.Next(0, rc.dim - 1)] = 1;
             //   strtingState = strtingState.Add(0.1);
-            strtingState[rc.dim] = -(Maingridindex - meanPosition[dimIndex]);
+            strtingState[rc.dim] = 0;
 
-            Random rnd = new Random();
+            
           //  strtingState[rnd.Next(1, rc.dim - 1)] = rnd.Next(- 20, 20);
 
 
@@ -694,7 +695,7 @@ namespace DataSetsSparsity
             {
                 Random rnd = new Random();
 
-                //error1 += rnd.Next(100, 120) ;
+                error1 += rnd.Next(100, 120) ;
             }
             // List<int> originalIndexList = tree;
             //for (int tmpIndex = 0; t)
