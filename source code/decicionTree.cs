@@ -5,7 +5,8 @@ using System.Text;
 using System.Threading.Tasks;
 using Accord.Math;
 using System.IO;
-
+using Accord.MachineLearning.VectorMachines;
+using Accord.MachineLearning.VectorMachines.Learning;
 
 namespace DataSetsSparsity
 {
@@ -104,8 +105,16 @@ namespace DataSetsSparsity
             }
             else if (rc.split_type == 5)  // Unisotropic partiion
             {
+
+                var ran1 = new Random(seed);
+                var ran2 = new Random(GeoWaveID);
+                int one = ran1.Next(0, int.MaxValue / 10);
+                int two = ran2.Next(0, int.MaxValue / 10);
+                bool[] Dim2TakeNode = getDim2Take(rc, one + two);
+                IsPartitionOK = getBestPartitionResult(ref dimIndex, ref Maingridindex, GeoWaveArr, GeoWaveID, Error, Dim2TakeNode);
                 // Add 1 to every Sample
-                IsPartitionOK = GetUnisotropicParition(ref hyperPlaneVector, GeoWaveArr, GeoWaveID, Error, out hyperPlane);
+                double splitValue = Form1.MainGrid[dimIndex][Maingridindex];
+                IsPartitionOK = GetUnisotropicParition(ref hyperPlaneVector, GeoWaveArr, GeoWaveID, Error, out hyperPlane, dimIndex, splitValue);
                 // Find Theta minimizer
                 dimIndex = 0;
                 Maingridindex = 0;
@@ -171,7 +180,11 @@ namespace DataSetsSparsity
             child0.dimIndex = dimIndex;
             child1.dimIndex = dimIndex;
 
-            //RECURSION STEP !!!
+            //RECURSION STEP !!! ASAFAB
+            if (GeoWaveArr[GeoWaveArr.Count - 2].pointsIdArray.Count == 0 || GeoWaveArr[GeoWaveArr.Count - 1].pointsIdArray.Count == 0)
+            {
+                int a111 = 1;
+            }
             recursiveBSP_WaveletsByConsts(GeoWaveArr, GeoWaveArr[GeoWaveID].child0, seed);
             recursiveBSP_WaveletsByConsts(GeoWaveArr, GeoWaveArr[GeoWaveID].child1, seed);
         }
@@ -513,12 +526,13 @@ namespace DataSetsSparsity
         }
 
         // ASAFAB - first try to find optimal partiiton
-        private bool GetUnisotropicParition(ref double hyperPlaneVector,
-                            List<GeoWave> GeoWaveArr, int GeoWaveID, double Error, out double[] hyperPlane)
+        private bool GetUnisotropicParition(ref double hyperPlaneVector ,List<GeoWave> GeoWaveArr, 
+            int GeoWaveID, double Error, out double[] hyperPlane, int dimIndex, double Maingridindex)
         {
             List<int> dataIDInGwW = new List<int>(GeoWaveArr[GeoWaveID].pointsIdArray); // The index of the relevent data
             double[] meanPosition = new double[rc.dim];
             double[][] centeredTrainingData = new double[dataIDInGwW.Count()][];
+            
 
             // Calculate mmean position of the relevant data (node data).
             for (int indexTmp = 0; indexTmp < dataIDInGwW.Count(); indexTmp++)
@@ -528,11 +542,13 @@ namespace DataSetsSparsity
                     meanPosition[j] += training_dt[dataIDInGwW[indexTmp]][j];
                 }
             }
+            /*
             for (int j = 0; j < this.rc.dim; j++)
             {
                 meanPosition[j] = meanPosition[j] / dataIDInGwW.Count();
             }
-
+            */
+            meanPosition = meanPosition.Divide((double) dataIDInGwW.Count());
             // combine positions and labels
             double[][][] dataForOptimizer = new double[2][][];
             dataForOptimizer[0] = new double[dataIDInGwW.Count()][];
@@ -558,31 +574,56 @@ namespace DataSetsSparsity
             }
 
             this.m_MeanPositionForSplit_5 = meanPosition;
-
-            // Initialize the optimizer
-            double epsg = 0.000000000;
-            double epsf = 0.000000000;
-            double epsx = 0.0000000000;
-            double diffstep = 2;
-            int maxits = 100000;
-            alglib.minlbfgsreport rep;
-
+            // ASAFAB - Initialize the optimizer
+            double epsg = 0.000000010100000;
+            double epsf = 0.00000000000;
+            double epsx = 0.000000;
+            double diffstep = 1;
+            int maxits = 0;
+            int[]a  =  UseKMeans2(dataForOptimizer[0]);
             double[] strtingState = new double[this.rc.dim + 1];
             double[] endState = new double[this.rc.dim + 1];
-            strtingState[rc.dim] = 1;
-            strtingState[rc.dim - 1] = 2;
+            strtingState[dimIndex] = 1;
+            //   strtingState = strtingState.Add(0.1);
+            strtingState[rc.dim] = -(Maingridindex - meanPosition[dimIndex]);
+
+            Random rnd = new Random();
+          //  strtingState[rnd.Next(1, rc.dim - 1)] = rnd.Next(- 20, 20);
+
+
+            // Optimizer 1
+            
             alglib.minlbfgsstate state;
-
-            alglib.minlbfgscreatef(this.rc.dim, strtingState, diffstep, out state);
+            alglib.minlbfgsreport rep;
+            alglib.minlbfgscreatef(1, strtingState, diffstep, out state);
             alglib.minlbfgssetcond(state, epsg, epsf, epsx, maxits);
-            alglib.minlbfgsoptimize(state, function1_func, null, (object) dataForOptimizer);
+            alglib.minlbfgsoptimize(state, function1_funcOptimizer1, null, (object) dataForOptimizer);
             alglib.minlbfgsresults(state, out endState, out rep);
-            /*
-            alglib.minlbfgscreate(1, strtingState, out state);
 
-            alglib.minlbfgssetcond(state, epsg, epsf, epsx, maxits);
-            alglib.minlbfgsoptimize(state, function1_func, null, null);
-            //alglib.minlbfgsresults(state, out x, out rep); */
+
+            //Optimizer 2
+            /*
+            double radius = 2;
+            double rho = 0;
+            double[] s = new double[rc.dim + 1];
+            s = s.Add(1);
+            alglib.minnsstate state;
+            alglib.minnsreport rep;
+            alglib.minnscreatef(rc.dim + 1, strtingState, diffstep, out state);
+            alglib.minnssetalgoags(state, radius, rho);
+            alglib.minnssetcond(state, epsx, maxits);
+            alglib.minnssetscale(state, s);
+
+            alglib.minnsoptimize(state, function1_funcOptimizer2, null, (object)dataForOptimizer);
+            alglib.minnsresults(state, out endState, out rep);
+            */
+
+            //Try .Net
+            /*var solver = new Accord.Math.Optimization.LevenbergMarquardt(rc.dim + 1);
+            solver.Function = function1_funcOptimizer1;
+
+            var solver = new NelderMead(numberOfVariables: 2);
+            */
             hyperPlane = endState;
             return true;
 
@@ -590,10 +631,10 @@ namespace DataSetsSparsity
         }
 
         //ASAFAB - this is the function we want to minimize
-        public static void function1_func(double[] x, ref double func, object obj)
+        public static void function1_funcOptimizer1(double[] x, ref double func, object obj)
         {
             // Cast bsck to tree
-            double[][][] dataForOptimizer = (double[][][]) obj;
+            double[][][] dataForOptimizer = (double[][][])obj;
 
             // clculate the mean of each side
             double[] mean0 = new double[dataForOptimizer[1][0].Count()];
@@ -617,7 +658,7 @@ namespace DataSetsSparsity
                 if (score > 0) // go to child 0 
                 {
                     valuesChild0.Add(dataForOptimizer[1][passingIndex]);
-                    for (int valueIndex = 0; valueIndex < dataForOptimizer[1][0].Count(); valueIndex ++)
+                    for (int valueIndex = 0; valueIndex < dataForOptimizer[1][0].Count(); valueIndex++)
                     {
                         mean0[valueIndex] += dataForOptimizer[1][passingIndex][valueIndex];
                     }
@@ -635,17 +676,104 @@ namespace DataSetsSparsity
                 // devide the mean (so ... it will be actully be mean)
                 for (int valueIndex = 0; valueIndex < dataForOptimizer[1][0].Count(); valueIndex++)
                 {
-                    mean0[valueIndex] /= dataForOptimizer[1].Count();
-                    mean1[valueIndex] /= dataForOptimizer[1].Count();
+                    if (valuesChild0.Count() != 0)
+                    {
+                        mean0[valueIndex] /= valuesChild0.Count();
+                    }
+
+
+                    if (valuesChild1.Count() != 0)
+                    {
+                        mean1[valueIndex] /= valuesChild1.Count();
+                    }
                 }
             }
             error0 = CalculateErrorOFChild(mean0, valuesChild0);
             error1 = CalculateErrorOFChild(mean1, valuesChild1);
+            if (valuesChild1.Count() == 0 || valuesChild0.Count() == 0)
+            {
+                Random rnd = new Random();
+
+                //error1 += rnd.Next(100, 120) ;
+            }
             // List<int> originalIndexList = tree;
             //for (int tmpIndex = 0; t)
             func = error0 + error1;
 
         }
+
+        //ASAFAB - this is the function we want to minimize
+        public static void function1_funcOptimizer2(double[] x,  double[] func, object obj)
+        {
+            // Cast bsck to tree
+            double[][][] dataForOptimizer = (double[][][])obj;
+
+            // clculate the mean of each side
+            double[] mean0 = new double[dataForOptimizer[1][0].Count()];
+            double[] mean1 = new double[dataForOptimizer[1][0].Count()];
+
+            double error0 = 0;
+            double error1 = 0;
+
+            List<double[]> valuesChild0 = new List<double[]>();
+            List<double[]> valuesChild1 = new List<double[]>();
+
+            for (int passingIndex = 0; passingIndex < dataForOptimizer[0].Count(); passingIndex++)
+            {
+                double score = 0;
+                // compute score (up or down the hyperplane)
+                for (int positionIndex = 0; positionIndex < dataForOptimizer[0][0].Count(); positionIndex++)
+                {
+                    score += x[positionIndex] * dataForOptimizer[0][passingIndex][positionIndex];
+                }
+
+                if (score > 0) // go to child 0 
+                {
+                    valuesChild0.Add(dataForOptimizer[1][passingIndex]);
+                    for (int valueIndex = 0; valueIndex < dataForOptimizer[1][0].Count(); valueIndex++)
+                    {
+                        mean0[valueIndex] += dataForOptimizer[1][passingIndex][valueIndex];
+                    }
+
+                }
+                else // go to child1
+                {
+                    valuesChild1.Add(dataForOptimizer[1][passingIndex]);
+                    for (int valueIndex = 0; valueIndex < dataForOptimizer[1][0].Count(); valueIndex++)
+                    {
+                        mean1[valueIndex] += dataForOptimizer[1][passingIndex][valueIndex];
+                    }
+                }
+
+                // devide the mean (so ... it will be actully be mean)
+                for (int valueIndex = 0; valueIndex < dataForOptimizer[1][0].Count(); valueIndex++)
+                {
+                    if (valuesChild0.Count() != 0)
+                    {
+                        mean0[valueIndex] /= valuesChild0.Count();
+                    }
+
+
+                    if (valuesChild1.Count() != 0)
+                    {
+                        mean1[valueIndex] /= valuesChild1.Count();
+                    }
+                }
+            }
+            error0 = CalculateErrorOFChild(mean0, valuesChild0);
+            error1 = CalculateErrorOFChild(mean1, valuesChild1);
+            if (valuesChild1.Count() == 0 || valuesChild0.Count() == 0)
+            {
+                Random rnd = new Random();
+
+                error1 += rnd.Next(100, 120);
+            }
+            // List<int> originalIndexList = tree;
+            //for (int tmpIndex = 0; t)
+            func = new double[1] { error0 + error1 };
+
+        }
+
         public static double CalculateErrorOFChild(double[] mean, List<double[]> valueChilds)
         {
             if (valueChilds.Count() == 0)
@@ -678,8 +806,9 @@ namespace DataSetsSparsity
         {
             child0.MeanValue.Multiply(0);
             child1.MeanValue.Multiply(0);
-            double[] mean0 = new double[rc.dim];
-            double[] mean1 = new double[rc.dim];
+
+            double[] mean0 = new double[training_label[0].Count()];
+            double[] mean1 = new double[training_label[0].Count()];
 
             //GO OVER ALL POINTS IN REGION
             for (int i = 0; i < indexArr.Count; i++)
@@ -694,23 +823,51 @@ namespace DataSetsSparsity
                 if (score > 0)
                 {
                     child0.pointsIdArray.Add(indexArr[i]);
-                    for (int positionSizeIndex = 0; positionSizeIndex < this.rc.dim; positionSizeIndex++)
+                    for (int valueIndex = 0; valueIndex < training_label[0].Count(); valueIndex++)
                     {
-                        mean0[positionSizeIndex] += training_dt[indexArr[i]][positionSizeIndex];
+                        mean0[valueIndex] += training_label[indexArr[i]][valueIndex];
                     }
                 } else
                 {
                     child1.pointsIdArray.Add(indexArr[i]);
-                    for (int positionSizeIndex = 0; positionSizeIndex < this.rc.dim; positionSizeIndex++)
+                    for (int valueIndex = 0; valueIndex < training_label[0].Count(); valueIndex++)
                     {
-                        mean1[positionSizeIndex] += training_dt[indexArr[i]][positionSizeIndex];
+                        mean1[valueIndex] += training_label[indexArr[i]][valueIndex];
                     }
                 }
              }
             if (child0.pointsIdArray.Count > 0)
-                child0.MeanValue = child0.MeanValue.Divide(Convert.ToDouble(child0.pointsIdArray.Count));
+                child0.MeanValue = mean0.Divide(Convert.ToDouble(child0.pointsIdArray.Count));
             if (child1.pointsIdArray.Count > 0)
-                child1.MeanValue = child1.MeanValue.Divide(Convert.ToDouble(child1.pointsIdArray.Count));
+                child1.MeanValue = mean1.Divide(Convert.ToDouble(child1.pointsIdArray.Count));
+            int num0 = child0.pointsIdArray.Count;
+            int num1 = child1.pointsIdArray.Count;
+
         }
+
+        public static int[] UseKMeans2(double[][] observations)
+        {
+            // Create a new K-Means algorithm
+            //KMeans kmeans = new KMeans(k: 2);
+            int[] clustering = KMeansDemo.Cluster(observations, 2); // this is it
+
+            //int[] labels = kmeans.Compute(observations, 0.1);
+            return clustering;
+        }
+
+       /* public static SupportVectorMachine TrainSVM (double[][] data, int[] clusters)
+        {
+            var learn = new SequentialMinimalOptimization()
+            {
+                UseComplexityHeuristic = true,
+                UseKernelEstimation = false
+            };
+            
+            // And then we can obtain a trained SVM by calling its Learn method
+            SupportVectorMachine svm = learn.Learn(data, clusters);
+
+            // Finally, we can obtain the decisions predicted by the machine:
+            bool[] prediction = svm.Decide(inputs);
+        }*/
     }
 }

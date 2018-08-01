@@ -92,6 +92,7 @@
     <Reference Include="System" />
     <Reference Include="System.configuration" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Numerics" />
     <Reference Include="System.Windows.Forms.DataVisualization" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
@@ -113,6 +114,7 @@
       <DependentUpon>Form1.cs</DependentUpon>
     </Compile>
     <Compile Include="GeoWave.cs" />
+    <Compile Include="KMeansDemo.cs" />
     <Compile Include="methodConfig.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="ProgressForm.cs">
